@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="TaskFlow — Enterprise Task Manager, Kanban board for teams" />
+  <title>TaskFlow — Task Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;1,14..32,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../src/css/styles.css" />
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════
+     AUTH SCREEN
+═══════════════════════════════════════════════ -->
+<div id="auth-screen" class="auth-screen">
+
+  <div class="auth-brand">
+    <div class="brand-logo" aria-hidden="true">
+      <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+        <rect width="40" height="40" rx="12" fill="#6366f1"/>
+        <path d="M11 20l6 6 12-12" stroke="#fff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <span class="brand-name">TaskFlow</span>
+  </div>
+
+  <div class="auth-tabs" role="tablist" aria-label="Auth options">
+    <button class="auth-tab active" id="tab-login" role="tab" aria-selected="true" aria-controls="panel-login" data-tab="login">Sign In</button>
+    <button class="auth-tab" id="tab-register" role="tab" aria-selected="false" aria-controls="panel-register" data-tab="register">Create Account</button>
+  </div>
+
+  <!-- Login -->
+  <div class="auth-panel" id="panel-login" role="tabpanel" aria-labelledby="tab-login">
+    <h1 class="auth-heading">Welcome back</h1>
+    <p class="auth-subheading">Sign in to your workspace</p>
+    <form id="login-form" novalidate autocomplete="on">
+      <div class="form-group">
+        <label for="login-email">Email address</label>
+        <input type="email" id="login-email" name="email" autocomplete="email" placeholder="you@company.com" required />
+        <span class="field-error" id="login-email-err" role="alert" aria-live="polite"></span>
+      </div>
+      <div class="form-group">
+        <label for="login-password">Password</label>
+        <div class="input-wrap">
+          <input type="password" id="login-password" name="password" autocomplete="current-password" placeholder="••••••••" required />
+          <button type="button" class="toggle-pw" aria-label="Show or hide password" data-target="login-password">
+            <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <span class="field-error" id="login-pw-err" role="alert" aria-live="polite"></span>
+      </div>
+      <button type="submit" class="btn-primary btn-full" id="login-submit">
+        <span class="btn-text">Sign In</span>
+        <span class="btn-loader" aria-hidden="true"></span>
+      </button>
+      <div class="auth-banner" id="login-banner" role="alert" aria-live="assertive"></div>
+    </form>
+  </div>
+
+  <!-- Register -->
+  <div class="auth-panel auth-panel--hidden" id="panel-register" role="tabpanel" aria-labelledby="tab-register">
+    <h1 class="auth-heading">Create your account</h1>
+    <p class="auth-subheading">Start managing tasks with your team</p>
+    <form id="register-form" novalidate autocomplete="on">
+      <div class="form-group">
+        <label for="reg-name">Full name</label>
+        <input type="text" id="reg-name" name="name" autocomplete="name" placeholder="Jane Smith" required />
+        <span class="field-error" id="reg-name-err" role="alert" aria-live="polite"></span>
+      </div>
+      <div class="form-group">
+        <label for="reg-email">Email address</label>
+        <input type="email" id="reg-email" name="email" autocomplete="email" placeholder="you@company.com" required />
+        <span class="field-error" id="reg-email-err" role="alert" aria-live="polite"></span>
+      </div>
+      <div class="form-group">
+        <label for="reg-password">Password <span class="hint">(min. 8 characters)</span></label>
+        <div class="input-wrap">
+          <input type="password" id="reg-password" name="password" autocomplete="new-password" placeholder="••••••••" required minlength="8" />
+          <button type="button" class="toggle-pw" aria-label="Show or hide password" data-target="reg-password">
+            <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <span class="field-error" id="reg-pw-err" role="alert" aria-live="polite"></span>
+      </div>
+      <button type="submit" class="btn-primary btn-full" id="register-submit">
+        <span class="btn-text">Create Account</span>
+        <span class="btn-loader" aria-hidden="true"></span>
+      </button>
+      <div class="auth-banner" id="reg-banner" role="alert" aria-live="assertive"></div>
+    </form>
+  </div>
+
+</div><!-- /auth-screen -->
+
+<!-- ═══════════════════════════════════════════════
+     APP SHELL
+═══════════════════════════════════════════════ -->
+<div id="app" class="app-shell app-shell--hidden" aria-label="TaskFlow Application">
+
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar" aria-label="Sidebar navigation">
+    <div class="sidebar-header">
+      <div class="brand-logo" aria-hidden="true">
+        <svg width="30" height="30" viewBox="0 0 40 40" fill="none">
+          <rect width="40" height="40" rx="12" fill="#6366f1"/>
+          <path d="M11 20l6 6 12-12" stroke="#fff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <span class="brand-name">TaskFlow</span>
+      <button class="sidebar-close" id="sidebar-close" aria-label="Close sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <div class="sidebar-user">
+      <div class="user-avatar" id="sidebar-avatar" aria-hidden="true"></div>
+      <div class="user-info">
+        <span class="user-name" id="sidebar-user-name">Loading…</span>
+        <span class="user-role" id="sidebar-user-role"></span>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav" aria-label="Main navigation">
+      <button class="nav-item active" data-view="board" aria-current="page">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="3" y="3" width="7" height="18" rx="1.5"/><rect x="14" y="3" width="7" height="10" rx="1.5"/><rect x="14" y="17" width="7" height="4" rx="1.5"/>
+        </svg>Board
+      </button>
+      <button class="nav-item" data-view="activity">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>Activity
+      </button>
+    </nav>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-header">
+        <span>Projects</span>
+        <button class="icon-btn" id="new-project-btn" aria-label="Create new project" title="New project">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      </div>
+      <ul class="project-list" id="project-list" role="list" aria-label="Your projects"></ul>
+    </div>
+
+    <button class="sidebar-logout" id="logout-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+      </svg>Sign Out
+    </button>
+  </aside>
+
+  <!-- Main content -->
+  <div class="main-content">
+
+    <!-- Topbar -->
+    <header class="topbar" role="banner">
+      <button class="hamburger" id="sidebar-toggle" aria-label="Toggle sidebar" aria-expanded="false" aria-controls="sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+
+      <div class="topbar-project">
+        <span class="project-dot" id="topbar-dot" aria-hidden="true"></span>
+        <h2 class="project-title" id="topbar-title">Select a project</h2>
+      </div>
+
+      <div class="topbar-tools topbar-tools--hidden" id="topbar-tools">
+        <div class="search-wrap">
+          <label for="search-input" class="sr-only">Search tasks</label>
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="search" id="search-input" placeholder="Search tasks…" aria-label="Search tasks" autocomplete="off" />
+        </div>
+        <label for="filter-status" class="sr-only">Filter by status</label>
+        <select id="filter-status" class="filter-select" aria-label="Filter by status">
+          <option value="">All Status</option>
+          <option value="todo">To Do</option>
+          <option value="in_progress">In Progress</option>
+          <option value="review">Review</option>
+          <option value="done">Done</option>
+        </select>
+        <label for="filter-priority" class="sr-only">Filter by priority</label>
+        <select id="filter-priority" class="filter-select" aria-label="Filter by priority">
+          <option value="">All Priority</option>
+          <option value="urgent">Urgent</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+        <button class="btn-primary" id="add-task-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true" width="15" height="15"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New Task
+        </button>
+      </div>
+    </header>
+
+    <!-- Stats bar -->
+    <div class="stats-bar stats-bar--hidden" id="stats-bar" aria-label="Task statistics">
+      <div class="stat-card" data-status="todo">
+        <span class="stat-value" id="stat-todo">0</span>
+        <span class="stat-label">To Do</span>
+      </div>
+      <div class="stat-card" data-status="in_progress">
+        <span class="stat-value" id="stat-inprogress">0</span>
+        <span class="stat-label">In Progress</span>
+      </div>
+      <div class="stat-card" data-status="review">
+        <span class="stat-value" id="stat-review">0</span>
+        <span class="stat-label">Review</span>
+      </div>
+      <div class="stat-card" data-status="done">
+        <span class="stat-value" id="stat-done">0</span>
+        <span class="stat-label">Done</span>
+      </div>
+      <div class="stat-card stat-total">
+        <span class="stat-value" id="stat-total">0</span>
+        <span class="stat-label">Total</span>
+      </div>
+    </div>
+
+    <!-- Board view -->
+    <main id="view-board" class="view" aria-label="Kanban board">
+      <div class="board-columns" id="board" role="list" aria-label="Task columns"></div>
+    </main>
+
+    <!-- Activity view -->
+    <main id="view-activity" class="view view--hidden" aria-label="Activity log">
+      <div class="activity-view">
+        <h2 class="view-heading">Recent Activity</h2>
+        <ul class="activity-list" id="activity-list" role="list" aria-label="Activity entries"></ul>
+      </div>
+    </main>
+
+    <!-- Empty state -->
+    <div id="empty-state" class="empty-state empty-state--hidden" role="status">
+      <div class="empty-icon" aria-hidden="true">
+        <svg viewBox="0 0 100 100" fill="none">
+          <rect x="12" y="24" width="76" height="58" rx="8" fill="#ede9fe"/>
+          <rect x="24" y="38" width="52" height="6" rx="3" fill="#a5b4fc"/>
+          <rect x="24" y="50" width="36" height="6" rx="3" fill="#c7d2fe"/>
+          <rect x="24" y="62" width="44" height="6" rx="3" fill="#c7d2fe"/>
+          <circle cx="74" cy="26" r="18" fill="#6366f1"/>
+          <line x1="74" y1="18" x2="74" y2="34" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+          <line x1="66" y1="26" x2="82" y2="26" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <h3>No project selected</h3>
+      <p>Pick a project from the sidebar or create a new one to get started.</p>
+      <button class="btn-primary" id="empty-new-project">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Create Project
+      </button>
+    </div>
+
+  </div><!-- /main-content -->
+</div><!-- /app-shell -->
+
+<!-- ═══════════════════════════════════════════════
+     MODALS
+═══════════════════════════════════════════════ -->
+
+<!-- Task modal -->
+<div class="modal-overlay" id="task-modal" role="dialog" aria-modal="true" aria-labelledby="task-modal-title" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title" id="task-modal-title">New Task</h2>
+      <button class="modal-close" id="task-modal-close" aria-label="Close task dialog">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form id="task-form" novalidate>
+      <div class="modal-body">
+        <input type="hidden" id="task-id" />
+        <div class="form-group">
+          <div class="label-row">
+            <label for="task-title">Task title <span class="req" aria-hidden="true">*</span></label>
+            <span class="char-count" id="task-title-count">0 / 200</span>
+          </div>
+          <input type="text" id="task-title" name="title" placeholder="e.g. Design landing page" required maxlength="200" autocomplete="off" />
+          <span class="field-error" id="task-title-err" role="alert" aria-live="polite"></span>
+        </div>
+        <div class="form-group">
+          <label for="task-description">Description</label>
+          <textarea id="task-description" name="description" rows="3" placeholder="Add more details about this task…" maxlength="2000"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="task-status">Status</label>
+            <select id="task-status" name="status">
+              <option value="todo">📋 To Do</option>
+              <option value="in_progress">🔄 In Progress</option>
+              <option value="review">👀 Review</option>
+              <option value="done">✅ Done</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="task-priority">Priority</label>
+            <select id="task-priority" name="priority">
+              <option value="low">🟢 Low</option>
+              <option value="medium" selected>🟡 Medium</option>
+              <option value="high">🟠 High</option>
+              <option value="urgent">🔴 Urgent</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="task-due">Due date</label>
+          <input type="date" id="task-due" name="due_date" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" id="task-cancel">Cancel</button>
+        <button type="submit" class="btn-primary" id="task-submit">
+          <span class="btn-text">Save Task</span>
+          <span class="btn-loader" aria-hidden="true"></span>
+        </button>
+      </div>
+      <div class="auth-banner" id="task-banner" role="alert" aria-live="assertive"></div>
+    </form>
+  </div>
+</div>
+
+<!-- Project modal -->
+<div class="modal-overlay" id="project-modal" role="dialog" aria-modal="true" aria-labelledby="project-modal-title" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title" id="project-modal-title">New Project</h2>
+      <button class="modal-close" id="project-modal-close" aria-label="Close project dialog">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form id="project-form" novalidate>
+      <div class="modal-body">
+        <input type="hidden" id="project-id" />
+        <div class="form-group">
+          <label for="project-name">Project name <span class="req" aria-hidden="true">*</span></label>
+          <input type="text" id="project-name" name="name" placeholder="e.g. Website Redesign" required maxlength="150" autocomplete="off" />
+          <span class="field-error" id="project-name-err" role="alert" aria-live="polite"></span>
+        </div>
+        <div class="form-group">
+          <label for="project-description">Description</label>
+          <textarea id="project-description" name="description" rows="2" placeholder="What is this project about?"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Accent colour</label>
+          <div class="color-swatches" role="radiogroup" aria-label="Project colour">
+            <input type="radio" name="project-color" id="col1" value="#6366f1" checked class="sr-only" /><label for="col1" class="swatch" style="--sw:#6366f1" aria-label="Indigo"></label>
+            <input type="radio" name="project-color" id="col2" value="#8b5cf6" class="sr-only" /><label for="col2" class="swatch" style="--sw:#8b5cf6" aria-label="Purple"></label>
+            <input type="radio" name="project-color" id="col3" value="#06b6d4" class="sr-only" /><label for="col3" class="swatch" style="--sw:#06b6d4" aria-label="Cyan"></label>
+            <input type="radio" name="project-color" id="col4" value="#10b981" class="sr-only" /><label for="col4" class="swatch" style="--sw:#10b981" aria-label="Emerald"></label>
+            <input type="radio" name="project-color" id="col5" value="#f59e0b" class="sr-only" /><label for="col5" class="swatch" style="--sw:#f59e0b" aria-label="Amber"></label>
+            <input type="radio" name="project-color" id="col6" value="#ef4444" class="sr-only" /><label for="col6" class="swatch" style="--sw:#ef4444" aria-label="Red"></label>
+            <input type="radio" name="project-color" id="col7" value="#ec4899" class="sr-only" /><label for="col7" class="swatch" style="--sw:#ec4899" aria-label="Pink"></label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" id="project-cancel">Cancel</button>
+        <button type="submit" class="btn-primary" id="project-submit">
+          <span class="btn-text">Create Project</span>
+          <span class="btn-loader" aria-hidden="true"></span>
+        </button>
+      </div>
+      <div class="auth-banner" id="project-banner" role="alert" aria-live="assertive"></div>
+    </form>
+  </div>
+</div>
+
+<!-- Confirm delete modal -->
+<div class="modal-overlay" id="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-desc" style="display:none">
+  <div class="modal modal-sm">
+    <div class="modal-header modal-header--danger">
+      <div class="modal-header-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+      </div>
+      <h2 class="modal-title" id="confirm-title">Delete Task</h2>
+      <button class="modal-close" id="confirm-close" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <p id="confirm-desc" class="confirm-text"></p>
+    <div class="modal-footer">
+      <button type="button" class="btn-secondary" id="confirm-cancel">Cancel</button>
+      <button type="button" class="btn-danger" id="confirm-ok">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" width="15" height="15"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+        Delete
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+<script src="../src/js/app.js"></script>
+</body>
+</html>
