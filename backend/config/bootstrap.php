@@ -33,10 +33,26 @@ if ($debug) {
 }
 
 // ── CORS headers ─────────────────────────────────────────────
-$allowedOrigin = rtrim($_ENV['APP_URL'] ?? '*', '/');
-header('Access-Control-Allow-Origin: ' . $allowedOrigin);
+// Support multiple allowed origins (comma-separated in APP_URL),
+// or use * to allow all origins.
+$appUrl         = rtrim($_ENV['APP_URL'] ?? '*', '/');
+$requestOrigin  = $_SERVER['HTTP_ORIGIN'] ?? '';
+$allowedOrigins = array_map('trim', explode(',', $appUrl));
+
+if ($appUrl === '*') {
+    header('Access-Control-Allow-Origin: *');
+} elseif ($requestOrigin && in_array($requestOrigin, $allowedOrigins, true)) {
+    header('Access-Control-Allow-Origin: ' . $requestOrigin);
+    header('Vary: Origin');
+} else {
+    // Fallback: allow the first configured origin
+    header('Access-Control-Allow-Origin: ' . $allowedOrigins[0]);
+    header('Vary: Origin');
+}
+
 header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
+header('Access-Control-Allow-Credentials: true');
 header('Content-Type: application/json; charset=utf-8');
 
 // Pre-flight
