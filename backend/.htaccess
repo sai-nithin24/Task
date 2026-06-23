@@ -1,7 +1,8 @@
 Options -Indexes
+DirectoryIndex index.php
 RewriteEngine On
 
-# Route all requests to api.php
+# Route all requests to routes/api.php
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ routes/api.php [QSA,L]
