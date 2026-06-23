@@ -86,4 +86,36 @@ $router->get('/health', function () {
     Response::success(['status' => 'ok', 'time' => date('c')]);
 });
 
+// ── Firebase diagnostics (remove after confirming connection works) ───
+$router->get('/debug/firebase', function () {
+    $projectId  = $_ENV['FIREBASE_PROJECT_ID']   ?? 'NOT SET';
+    $email      = $_ENV['FIREBASE_CLIENT_EMAIL']  ?? 'NOT SET';
+    $key        = $_ENV['FIREBASE_PRIVATE_KEY']   ?? 'NOT SET';
+
+    // Check key format
+    $keyLoaded  = false;
+    $keyError   = '';
+    if ($key !== 'NOT SET') {
+        $res = openssl_pkey_get_private($key);
+        if ($res) {
+            $keyLoaded = true;
+        } else {
+            $keyError = openssl_error_string() ?: 'unknown openssl error';
+        }
+    }
+
+    Response::success([
+        'project_id_set'    => $projectId !== 'NOT SET',
+        'project_id'        => $projectId,
+        'email_set'         => $email !== 'NOT SET',
+        'email'             => $email,
+        'key_set'           => $key !== 'NOT SET',
+        'key_first_30'      => substr($key, 0, 30),
+        'key_loaded_ok'     => $keyLoaded,
+        'key_error'         => $keyError,
+        'key_has_newlines'  => substr_count($key, "\n"),
+        'key_has_literal_n' => substr_count($key, '\n'),
+    ]);
+});
+
 $router->dispatch();
