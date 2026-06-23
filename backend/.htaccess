@@ -2,6 +2,10 @@ Options -Indexes
 DirectoryIndex index.php
 RewriteEngine On
 
+# Pass Authorization header through to PHP (Apache strips it by default)
+CGIPassAuth On
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
 # Route all requests to routes/api.php
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
