@@ -5,6 +5,20 @@ declare(strict_types=1);
 require_once __DIR__ . '/env.php';
 loadEnv(dirname(__DIR__, 2) . '/.env');
 
+// Ensure all env vars are accessible via $_ENV regardless of PHP's
+// variables_order setting (important for Render and other PaaS hosts
+// that inject env vars as system environment variables, not into $_ENV).
+foreach (['DB_HOST','DB_PORT','DB_NAME','DB_USER','DB_PASS','DB_CHARSET',
+          'JWT_SECRET','JWT_EXPIRY','APP_ENV','APP_DEBUG','APP_URL'] as $_envKey) {
+    if (!isset($_ENV[$_envKey])) {
+        $v = getenv($_envKey);
+        if ($v !== false) {
+            $_ENV[$_envKey] = $v;
+        }
+    }
+}
+unset($_envKey, $v);
+
 // ── Error handling based on environment ──────────────────────
 $debug = filter_var($_ENV['APP_DEBUG'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
