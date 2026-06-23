@@ -59,7 +59,7 @@ function clearBanner(el) {
 ══════════════════════════════════════════════════ */
 // ⚠️  PRODUCTION: Replace this with your Railway backend URL before deploying.
 // Example: const API_BASE = 'https://taskflow-backend.up.railway.app/api';
-const API_BASE = 'REPLACE_WITH_RAILWAY_BACKEND_URL/api';
+const API_BASE = 'https://your-service.onrender.com/api';
 
 const state = {
   token:         null,
