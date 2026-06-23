@@ -1,165 +1,197 @@
 <?php
 declare(strict_types=1);
 
+/**
+ * TaskModel — Firestore-backed task operations.
+ *
+ * Collection: tasks/{id}
+ * Fields: project_id, assigned_to, assigned_name, assigned_color,
+ *         title, description, status, priority, due_date,
+ *         position_index, is_deleted, created_at, updated_at
+ */
 class TaskModel
 {
-    private PDO $db;
+    private FirestoreClient $db;
+    private const COLLECTION = 'tasks';
+    private const VALID_STATUS   = ['todo', 'in_progress', 'review', 'done'];
+    private const VALID_PRIORITY = ['low', 'medium', 'high', 'urgent'];
 
     public function __construct()
     {
-        $this->db = Database::getConnection();
+        $this->db = FirestoreClient::getInstance();
     }
 
     /**
-     * Returns tasks for a project with optional search + filters.
+     * Returns tasks for a project with optional filters.
+     * Firestore handles status/priority/date filters via queries.
+     * Search (title/description LIKE) is done client-side on the result set.
      *
      * @return array<int, array>
      */
-    public function allForProject(int $projectId, array $filters = []): array
+    public function allForProject(string $projectId, array $filters = []): array
     {
-        $sql    = 'SELECT t.*, u.name AS assigned_name, u.avatar_color AS assigned_color
-                   FROM tasks t
-                   LEFT JOIN users u ON u.id = t.assigned_to
-                   WHERE t.project_id = ? AND t.is_deleted = 0';
-        $params = [$projectId];
+        $queryFilters = [
+            ['project_id', '==', $projectId],
+            ['is_deleted',  '==', false],
+        ];
 
-        if (!empty($filters['status'])) {
-            $sql     .= ' AND t.status = ?';
-            $params[] = $filters['status'];
+        // Single-field filters are pushed to Firestore
+        if (!empty($filters['status']) && in_array($filters['status'], self::VALID_STATUS, true)) {
+            $queryFilters[] = ['status', '==', $filters['status']];
         }
-        if (!empty($filters['priority'])) {
-            $sql     .= ' AND t.priority = ?';
-            $params[] = $filters['priority'];
+        if (!empty($filters['priority']) && in_array($filters['priority'], self::VALID_PRIORITY, true)) {
+            $queryFilters[] = ['priority', '==', $filters['priority']];
         }
-        if (!empty($filters['search'])) {
-            $sql     .= ' AND (t.title LIKE ? OR t.description LIKE ?)';
-            $term     = '%' . $filters['search'] . '%';
-            $params[] = $term;
-            $params[] = $term;
-        }
+
+        // Note: combining inequality filters (due_date range) on different fields
+        // than equality filters requires composite Firestore indexes.
+        // We fetch and filter dates in PHP to avoid index complexity.
+        $tasks = $this->db->query(self::COLLECTION, $queryFilters, [
+            ['position_index', 'ASCENDING'],
+            ['created_at',     'ASCENDING'],
+        ]);
+
+        // PHP-side: date range and search filtering
         if (!empty($filters['due_from'])) {
-            $sql     .= ' AND t.due_date >= ?';
-            $params[] = $filters['due_from'];
+            $tasks = array_filter($tasks, fn($t) =>
+                !empty($t['due_date']) && $t['due_date'] >= $filters['due_from']
+            );
         }
         if (!empty($filters['due_to'])) {
-            $sql     .= ' AND t.due_date <= ?';
-            $params[] = $filters['due_to'];
+            $tasks = array_filter($tasks, fn($t) =>
+                !empty($t['due_date']) && $t['due_date'] <= $filters['due_to']
+            );
+        }
+        if (!empty($filters['search'])) {
+            $term  = strtolower($filters['search']);
+            $tasks = array_filter($tasks, fn($t) =>
+                str_contains(strtolower($t['title'] ?? ''), $term) ||
+                str_contains(strtolower($t['description'] ?? ''), $term)
+            );
         }
 
-        $sql .= ' ORDER BY t.position_index ASC, t.id ASC';
-
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute($params);
-        return $stmt->fetchAll();
+        return array_values($tasks);
     }
 
-    public function findById(int $id): array|false
+    public function findById(string $id): array|false
     {
-        $stmt = $this->db->prepare(
-            'SELECT t.*, u.name AS assigned_name
-             FROM tasks t
-             LEFT JOIN users u ON u.id = t.assigned_to
-             WHERE t.id = ? AND t.is_deleted = 0 LIMIT 1'
-        );
-        $stmt->execute([$id]);
-        return $stmt->fetch();
-    }
-
-    /** @param array<string,mixed> $data */
-    public function create(array $data): int
-    {
-        $stmt = $this->db->prepare(
-            'INSERT INTO tasks (project_id, assigned_to, title, description, status, priority, due_date, position_index)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        );
-        $stmt->execute([
-            (int)$data['project_id'],
-            !empty($data['assigned_to']) ? (int)$data['assigned_to'] : null,
-            trim($data['title']),
-            trim($data['description'] ?? ''),
-            $data['status']   ?? 'todo',
-            $data['priority'] ?? 'medium',
-            !empty($data['due_date']) ? $data['due_date'] : null,
-            (int)($data['position_index'] ?? 0),
-        ]);
-        return (int)$this->db->lastInsertId();
-    }
-
-    /** @param array<string,mixed> $data */
-    public function update(int $id, array $data): bool
-    {
-        $stmt = $this->db->prepare(
-            'UPDATE tasks
-             SET title = ?, description = ?, status = ?, priority = ?,
-                 due_date = ?, assigned_to = ?, position_index = ?
-             WHERE id = ? AND is_deleted = 0'
-        );
-        return $stmt->execute([
-            trim($data['title']),
-            trim($data['description'] ?? ''),
-            $data['status']   ?? 'todo',
-            $data['priority'] ?? 'medium',
-            !empty($data['due_date']) ? $data['due_date'] : null,
-            !empty($data['assigned_to']) ? (int)$data['assigned_to'] : null,
-            (int)($data['position_index'] ?? 0),
-            $id,
-        ]);
-    }
-
-    /** Update only the status (for drag & drop column changes). */
-    public function updateStatus(int $id, string $status): bool
-    {
-        $allowed = ['todo', 'in_progress', 'review', 'done'];
-        if (!in_array($status, $allowed, true)) {
+        $doc = $this->db->getDocument(self::COLLECTION, $id);
+        if (!$doc || !empty($doc['is_deleted'])) {
             return false;
         }
-        $stmt = $this->db->prepare('UPDATE tasks SET status = ? WHERE id = ? AND is_deleted = 0');
-        return $stmt->execute([$status, $id]);
+        return $doc;
     }
 
-    /** Soft-delete a task. */
-    public function softDelete(int $id): bool
+    /** Find a soft-deleted task (for restore). */
+    public function findDeletedById(string $id): array|false
     {
-        $stmt = $this->db->prepare('UPDATE tasks SET is_deleted = 1 WHERE id = ?');
-        return $stmt->execute([$id]);
+        $doc = $this->db->getDocument(self::COLLECTION, $id);
+        if (!$doc || empty($doc['is_deleted'])) {
+            return false;
+        }
+        return $doc;
     }
 
-    /** Permanently removes a task. */
-    public function hardDelete(int $id): bool
+    /** @param array<string,mixed> $data */
+    public function create(array $data): string
     {
-        $stmt = $this->db->prepare('DELETE FROM tasks WHERE id = ?');
-        return $stmt->execute([$id]);
+        $docData = [
+            'project_id'     => (string)($data['project_id'] ?? ''),
+            'assigned_to'    => !empty($data['assigned_to']) ? (string)$data['assigned_to'] : null,
+            'assigned_name'  => null,
+            'assigned_color' => null,
+            'title'          => trim($data['title']),
+            'description'    => trim($data['description'] ?? ''),
+            'status'         => in_array($data['status'] ?? '', self::VALID_STATUS, true)
+                                    ? $data['status'] : 'todo',
+            'priority'       => in_array($data['priority'] ?? '', self::VALID_PRIORITY, true)
+                                    ? $data['priority'] : 'medium',
+            'due_date'       => !empty($data['due_date']) ? $data['due_date'] : null,
+            'position_index' => (int)($data['position_index'] ?? 0),
+            'is_deleted'     => false,
+            'created_at'     => date('c'),
+            'updated_at'     => date('c'),
+        ];
+
+        return $this->db->addDocument(self::COLLECTION, $docData);
     }
 
-    /** Restore a soft-deleted task. */
-    public function restore(int $id): bool
+    /** @param array<string,mixed> $data */
+    public function update(string $id, array $data): bool
     {
-        $stmt = $this->db->prepare('UPDATE tasks SET is_deleted = 0 WHERE id = ?');
-        return $stmt->execute([$id]);
+        $this->db->updateDocument(self::COLLECTION, $id, [
+            'title'          => trim($data['title']),
+            'description'    => trim($data['description'] ?? ''),
+            'status'         => in_array($data['status'] ?? '', self::VALID_STATUS, true)
+                                    ? $data['status'] : 'todo',
+            'priority'       => in_array($data['priority'] ?? '', self::VALID_PRIORITY, true)
+                                    ? $data['priority'] : 'medium',
+            'due_date'       => !empty($data['due_date']) ? $data['due_date'] : null,
+            'assigned_to'    => !empty($data['assigned_to']) ? (string)$data['assigned_to'] : null,
+            'position_index' => (int)($data['position_index'] ?? 0),
+            'updated_at'     => date('c'),
+        ]);
+        return true;
     }
 
-    /** Update position_index for drag & drop reorder. */
-    public function reorder(int $id, int $position): bool
+    public function updateStatus(string $id, string $status): bool
     {
-        $stmt = $this->db->prepare('UPDATE tasks SET position_index = ? WHERE id = ?');
-        return $stmt->execute([$position, $id]);
+        if (!in_array($status, self::VALID_STATUS, true)) {
+            return false;
+        }
+        $this->db->updateDocument(self::COLLECTION, $id, [
+            'status'     => $status,
+            'updated_at' => date('c'),
+        ]);
+        return true;
     }
 
-    /** Stats for the dashboard. */
-    public function statsForProject(int $projectId): array
+    public function softDelete(string $id): bool
     {
-        $stmt = $this->db->prepare(
-            'SELECT status, COUNT(*) AS cnt
-             FROM tasks
-             WHERE project_id = ? AND is_deleted = 0
-             GROUP BY status'
-        );
-        $stmt->execute([$projectId]);
-        $rows  = $stmt->fetchAll();
+        $this->db->updateDocument(self::COLLECTION, $id, [
+            'is_deleted' => true,
+            'updated_at' => date('c'),
+        ]);
+        return true;
+    }
+
+    public function hardDelete(string $id): bool
+    {
+        $this->db->deleteDocument(self::COLLECTION, $id);
+        return true;
+    }
+
+    public function restore(string $id): bool
+    {
+        $this->db->updateDocument(self::COLLECTION, $id, [
+            'is_deleted' => false,
+            'updated_at' => date('c'),
+        ]);
+        return true;
+    }
+
+    public function reorder(string $id, int $position): bool
+    {
+        $this->db->updateDocument(self::COLLECTION, $id, [
+            'position_index' => $position,
+            'updated_at'     => date('c'),
+        ]);
+        return true;
+    }
+
+    /** Stats for the dashboard — computed from the task list. */
+    public function statsForProject(string $projectId): array
+    {
+        $tasks = $this->db->query(self::COLLECTION, [
+            ['project_id', '==', $projectId],
+            ['is_deleted',  '==', false],
+        ]);
+
         $stats = ['todo' => 0, 'in_progress' => 0, 'review' => 0, 'done' => 0, 'total' => 0];
-        foreach ($rows as $row) {
-            $stats[$row['status']] = (int)$row['cnt'];
-            $stats['total']       += (int)$row['cnt'];
+        foreach ($tasks as $task) {
+            $s = $task['status'] ?? 'todo';
+            if (isset($stats[$s])) $stats[$s]++;
+            $stats['total']++;
         }
         return $stats;
     }

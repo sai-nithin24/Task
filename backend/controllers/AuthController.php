@@ -20,12 +20,10 @@ class AuthController extends BaseController
             Response::error('Missing required fields.', 422, $errors);
         }
 
-        // Email format check
         if (!filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
             Response::error('Invalid email address.', 422);
         }
 
-        // Password strength
         if (strlen($data['password']) < 8) {
             Response::error('Password must be at least 8 characters.', 422);
         }
@@ -34,7 +32,7 @@ class AuthController extends BaseController
             Response::error('Email address is already registered.', 409);
         }
 
-        $id   = $this->users->create($data);
+        $id   = $this->users->create($data);          // returns Firestore doc ID (string)
         $user = $this->users->findById($id);
 
         $token = JwtHelper::encode([
@@ -61,12 +59,11 @@ class AuthController extends BaseController
 
         $user = $this->users->findByEmail($data['email']);
 
-        // Constant-time check to prevent timing attacks
-        if (!$user || !password_verify($data['password'], $user['password'])) {
+        if (!$user || !password_verify($data['password'], $user['password_hash'])) {
             Response::error('Invalid email or password.', 401);
         }
 
-        if (!$user['is_active']) {
+        if (!($user['is_active'] ?? true)) {
             Response::error('Your account has been deactivated.', 403);
         }
 
@@ -82,11 +79,11 @@ class AuthController extends BaseController
         ], 'Login successful.');
     }
 
-    /** GET /auth/me — returns current authenticated user */
+    /** GET /auth/me */
     public function me(): void
     {
         $this->requireAuth();
-        $user = $this->users->findById((int)$this->authUser['user_id']);
+        $user = $this->users->findById((string)$this->authUser['user_id']);
 
         if (!$user) {
             Response::notFound('User not found.');
@@ -95,10 +92,9 @@ class AuthController extends BaseController
         Response::success(['user' => $this->publicUser($user)]);
     }
 
-    /** Strip sensitive fields before returning user data. */
     private function publicUser(array $user): array
     {
-        unset($user['password']);
+        unset($user['password_hash']);
         return $user;
     }
 }

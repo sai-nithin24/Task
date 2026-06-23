@@ -1,82 +1,130 @@
 <?php
 declare(strict_types=1);
 
+/**
+ * ProjectModel — Firestore-backed project operations.
+ *
+ * Collection: projects/{id}
+ * Fields: user_id, name, description, color, is_archived, task_count, done_count, created_at, updated_at
+ */
 class ProjectModel
 {
-    private PDO $db;
+    private FirestoreClient $db;
+    private const COLLECTION = 'projects';
 
     public function __construct()
     {
-        $this->db = Database::getConnection();
+        $this->db = FirestoreClient::getInstance();
     }
 
     /** @return array<int, array> */
-    public function allForUser(int $userId): array
+    public function allForUser(string $userId): array
     {
-        $stmt = $this->db->prepare(
-            'SELECT p.*, 
-                    COUNT(t.id) AS task_count,
-                    SUM(CASE WHEN t.status = "done" AND t.is_deleted = 0 THEN 1 ELSE 0 END) AS done_count
-             FROM projects p
-             LEFT JOIN tasks t ON t.project_id = p.id AND t.is_deleted = 0
-             WHERE p.user_id = ? AND p.is_archived = 0
-             GROUP BY p.id
-             ORDER BY p.created_at DESC'
-        );
-        $stmt->execute([$userId]);
-        return $stmt->fetchAll();
+        $projects = $this->db->query(self::COLLECTION, [
+            ['user_id',     '==', $userId],
+            ['is_archived', '==', false],
+        ], [['created_at', 'DESCENDING']]);
+
+        // Enrich each project with live task counts from the tasks collection
+        foreach ($projects as &$project) {
+            $counts = $this->getTaskCounts($project['id']);
+            $project['task_count'] = $counts['total'];
+            $project['done_count'] = $counts['done'];
+        }
+        unset($project);
+
+        return $projects;
     }
 
-    public function findById(int $id, int $userId): array|false
+    public function findById(string $id, string $userId): array|false
     {
-        $stmt = $this->db->prepare(
-            'SELECT * FROM projects WHERE id = ? AND user_id = ? LIMIT 1'
-        );
-        $stmt->execute([$id, $userId]);
-        return $stmt->fetch();
-    }
-
-    /** @param array<string,mixed> $data */
-    public function create(array $data, int $userId): int
-    {
-        $stmt = $this->db->prepare(
-            'INSERT INTO projects (user_id, name, description, color) VALUES (?, ?, ?, ?)'
-        );
-        $stmt->execute([
-            $userId,
-            trim($data['name']),
-            trim($data['description'] ?? ''),
-            $data['color'] ?? '#6366f1',
-        ]);
-        return (int)$this->db->lastInsertId();
+        $doc = $this->db->getDocument(self::COLLECTION, $id);
+        if (!$doc || $doc['user_id'] !== $userId) {
+            return false;
+        }
+        return $doc;
     }
 
     /** @param array<string,mixed> $data */
-    public function update(int $id, array $data, int $userId): bool
+    public function create(array $data, string $userId): string
     {
-        $stmt = $this->db->prepare(
-            'UPDATE projects SET name = ?, description = ?, color = ? WHERE id = ? AND user_id = ?'
-        );
-        return $stmt->execute([
-            trim($data['name']),
-            trim($data['description'] ?? ''),
-            $data['color'] ?? '#6366f1',
-            $id,
-            $userId,
+        $docData = [
+            'user_id'     => $userId,
+            'name'        => trim($data['name']),
+            'description' => trim($data['description'] ?? ''),
+            'color'       => $data['color'] ?? '#6366f1',
+            'is_archived' => false,
+            'task_count'  => 0,
+            'done_count'  => 0,
+            'created_at'  => date('c'),
+            'updated_at'  => date('c'),
+        ];
+
+        return $this->db->addDocument(self::COLLECTION, $docData);
+    }
+
+    /** @param array<string,mixed> $data */
+    public function update(string $id, array $data, string $userId): bool
+    {
+        $doc = $this->findById($id, $userId);
+        if (!$doc) return false;
+
+        $this->db->updateDocument(self::COLLECTION, $id, [
+            'name'        => trim($data['name']),
+            'description' => trim($data['description'] ?? ''),
+            'color'       => $data['color'] ?? '#6366f1',
+            'updated_at'  => date('c'),
         ]);
+        return true;
     }
 
-    public function archive(int $id, int $userId): bool
+    public function archive(string $id, string $userId): bool
     {
-        $stmt = $this->db->prepare(
-            'UPDATE projects SET is_archived = 1 WHERE id = ? AND user_id = ?'
-        );
-        return $stmt->execute([$id, $userId]);
+        $doc = $this->findById($id, $userId);
+        if (!$doc) return false;
+
+        $this->db->updateDocument(self::COLLECTION, $id, [
+            'is_archived' => true,
+            'updated_at'  => date('c'),
+        ]);
+        return true;
     }
 
-    public function delete(int $id, int $userId): bool
+    public function delete(string $id, string $userId): bool
     {
-        $stmt = $this->db->prepare('DELETE FROM projects WHERE id = ? AND user_id = ?');
-        return $stmt->execute([$id, $userId]);
+        $doc = $this->findById($id, $userId);
+        if (!$doc) return false;
+
+        // Hard delete the project document
+        $this->db->deleteDocument(self::COLLECTION, $id);
+
+        // Cascade: delete all tasks belonging to this project
+        $tasks = $this->db->query('tasks', [
+            ['project_id', '==', $id],
+        ]);
+        foreach ($tasks as $task) {
+            $this->db->deleteDocument('tasks', $task['id']);
+        }
+
+        return true;
+    }
+
+    /** Compute task counts for a project by querying the tasks collection. */
+    public function getTaskCounts(string $projectId): array
+    {
+        $tasks = $this->db->query('tasks', [
+            ['project_id', '==', $projectId],
+            ['is_deleted',  '==', false],
+        ]);
+
+        $counts = ['total' => 0, 'todo' => 0, 'in_progress' => 0, 'review' => 0, 'done' => 0];
+        foreach ($tasks as $task) {
+            $counts['total']++;
+            $status = $task['status'] ?? 'todo';
+            if (isset($counts[$status])) {
+                $counts[$status]++;
+            }
+        }
+        return $counts;
     }
 }

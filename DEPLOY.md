@@ -1,225 +1,227 @@
-# Deployment Guide — TaskFlow Enterprise Task Manager
-# Railway (Backend + Database) + Vercel (Frontend)
+# Deployment Guide — TaskFlow
+# Vercel (Frontend) + Render (Backend) + Firebase Firestore (Database)
 
 ## Architecture
 
-| Layer    | Platform       | Stack                         |
-|----------|----------------|-------------------------------|
-| Frontend | Vercel         | Vanilla JS (static site)      |
-| Backend  | Railway        | PHP 8.2 + Apache (Docker)     |
-| Database | Railway        | MySQL 8.0 (managed plugin)    |
+| Layer    | Platform         | Stack                              |
+|----------|------------------|------------------------------------|
+| Frontend | Vercel           | Vanilla JS static site             |
+| Backend  | Render           | PHP 8.2 + Apache (Docker)          |
+| Database | Firebase         | Firestore (NoSQL, serverless)      |
 
-Railway hosts both the PHP backend and the MySQL database.
-Vercel hosts the static frontend.
-
----
-
-## Prerequisites
-
-- GitHub account (Railway and Vercel connect via GitHub)
-- Railway account → https://railway.app (free $5 credit, no credit card needed)
-- Vercel account → https://vercel.com (free)
-- Your project pushed to a GitHub repository
+No MySQL. No Railway. Data lives in Firebase Firestore.
+The PHP backend talks to Firestore via the REST API using a Service Account key.
 
 ---
 
-## STEP 1 — Push your code to GitHub
+## STEP 1 — Create a Firebase Project
 
-If not already done:
+1. Go to https://console.firebase.google.com
+2. Click **Add project** → name it (e.g. `taskflow`) → Continue
+3. Disable Google Analytics (not needed) → **Create project**
+4. Once created, click **Continue**
 
-```bash
-git add .
-git commit -m "Add Railway + Vercel deployment config"
-git push origin main
+---
+
+## STEP 2 — Enable Firestore
+
+1. In the left sidebar → **Build** → **Firestore Database**
+2. Click **Create database**
+3. Select **Start in production mode** → Next
+4. Choose a region (e.g. `us-east1` or closest to you) → **Enable**
+
+Firestore is now ready. No schema needed — it's schema-less.
+
+---
+
+## STEP 3 — Set Firestore Security Rules
+
+In the Firestore console → **Rules** tab, replace the default rules with:
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Backend-only access via Service Account — deny all direct client access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
 ```
 
-Make sure `.env` is NOT committed (it is in `.gitignore` ✅).
+Click **Publish**. All access goes through your PHP backend only.
 
 ---
 
-## STEP 2 — Create a Railway project
+## STEP 4 — Create Required Firestore Indexes
 
-1. Go to https://railway.app and sign in
-2. Click **New Project**
-3. Select **Deploy from GitHub repo**
-4. Authorize Railway to access your GitHub account if prompted
-5. Select your repository
+The app uses composite queries that require indexes.
+In Firestore console → **Indexes** tab → **Composite** → create these:
 
-Railway will show you the project dashboard.
+| Collection     | Fields (in order)                          | Query scope |
+|----------------|--------------------------------------------|-------------|
+| `projects`     | `user_id` ASC, `is_archived` ASC, `created_at` DESC | Collection |
+| `tasks`        | `project_id` ASC, `is_deleted` ASC, `position_index` ASC, `created_at` ASC | Collection |
+| `tasks`        | `project_id` ASC, `is_deleted` ASC, `status` ASC, `position_index` ASC | Collection |
+| `tasks`        | `project_id` ASC, `is_deleted` ASC, `priority` ASC, `position_index` ASC | Collection |
+| `activity_logs`| `project_id` ASC, `created_at` DESC        | Collection |
+| `activity_logs`| `user_id` ASC, `created_at` DESC           | Collection |
 
----
-
-## STEP 3 — Add a MySQL database on Railway
-
-1. Inside your Railway project, click **+ New**
-2. Select **Database** → **Add MySQL**
-3. Railway spins up a MySQL 8 instance automatically
-4. Click on the MySQL service → go to the **Connect** tab
-5. Note these values (you'll need them in Step 5):
-   - `MYSQLHOST`
-   - `MYSQLPORT`
-   - `MYSQLDATABASE`
-   - `MYSQLUSER`
-   - `MYSQLPASSWORD`
-
-> Railway also provides these as `${{MySQL.MYSQLHOST}}` reference variables
-> that you can use directly — covered in Step 5.
+> Tip: Firestore also auto-suggests missing indexes from error messages in
+> the Firebase console logs when a query runs without one.
 
 ---
 
-## STEP 4 — Run the database schema
+## STEP 5 — Get the Service Account Key
 
-You need to run `docs/database-schema.sql` once to create all tables.
+1. In Firebase console → click the ⚙️ gear icon → **Project settings**
+2. Go to the **Service accounts** tab
+3. Click **Generate new private key** → **Generate key**
+4. A JSON file downloads — open it and note these 3 values:
+   - `project_id`
+   - `client_email`
+   - `private_key` (the entire RSA key including `-----BEGIN...-----END...`)
 
-**Option A — Railway's built-in query editor (easiest):**
-1. Click on your MySQL service in Railway
-2. Go to the **Query** tab
-3. Paste the contents of `docs/database-schema.sql`
-4. Click **Run Query**
-
-**Option B — MySQL Workbench / TablePlus / DBeaver:**
-1. Use the connection details from Step 3 to connect
-2. Open and run `docs/database-schema.sql`
+Keep this file secure — **never commit it to git**.
 
 ---
 
-## STEP 5 — Configure the backend service on Railway
+## STEP 6 — Deploy the Backend to Render
 
-1. In your Railway project, click on your **GitHub repo service** (the PHP backend)
-2. Go to **Settings** → set **Root Directory** to `backend`
-   - Railway will now build using `backend/Dockerfile`
-3. Go to the **Variables** tab and add these environment variables:
+1. Go to https://render.com → sign up / log in
+2. Click **New** → **Web Service**
+3. Connect your GitHub account → select your repo **sai-nithin24/Task**
+4. Configure:
+   - **Name**: `taskflow-backend`
+   - **Root Directory**: `backend`
+   - **Environment**: Docker (auto-detected from Dockerfile)
+   - **Plan**: Free
+5. Click **Create Web Service** — it starts building (takes 3-5 min first time)
 
-| Variable     | Value                                                      |
-|--------------|------------------------------------------------------------|
-| `DB_HOST`    | `${{MySQL.MYSQLHOST}}`  (Railway reference variable)       |
-| `DB_PORT`    | `${{MySQL.MYSQLPORT}}`                                     |
-| `DB_NAME`    | `${{MySQL.MYSQLDATABASE}}`                                 |
-| `DB_USER`    | `${{MySQL.MYSQLUSER}}`                                     |
-| `DB_PASS`    | `${{MySQL.MYSQLPASSWORD}}`                                 |
-| `DB_CHARSET` | `utf8mb4`                                                  |
-| `JWT_SECRET` | Generate a random 64-char string (see tip below)           |
-| `JWT_EXPIRY` | `3600`                                                     |
-| `APP_ENV`    | `production`                                               |
-| `APP_DEBUG`  | `false`                                                    |
-| `APP_URL`    | Your Vercel URL — fill in after Step 8 (use `*` for now)  |
+### Add Environment Variables on Render
 
-**Tip — generate a JWT_SECRET:**
-Run this in your terminal and paste the output:
-```bash
-# PowerShell
+Go to your service → **Environment** tab → add these variables:
+
+| Key                    | Value                                             |
+|------------------------|---------------------------------------------------|
+| `FIREBASE_PROJECT_ID`  | your Firebase project ID (e.g. `taskflow-abc12`) |
+| `FIREBASE_CLIENT_EMAIL`| the `client_email` from the JSON key file         |
+| `FIREBASE_PRIVATE_KEY` | the full `private_key` value — paste the entire thing including `-----BEGIN RSA PRIVATE KEY-----` and `-----END RSA PRIVATE KEY-----`. Render will store it safely. |
+| `JWT_SECRET`           | any random 64-char string (see tip below)         |
+| `JWT_EXPIRY`           | `3600`                                            |
+| `APP_ENV`              | `production`                                      |
+| `APP_DEBUG`            | `false`                                           |
+| `APP_URL`              | `*` for now — update after Step 8                 |
+
+**Tip — generate a JWT_SECRET in PowerShell:**
+```powershell
 -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 64 | ForEach-Object {[char]$_})
 ```
 
-4. Click **Deploy** — Railway builds the Docker image and starts the container
-
-5. Once deployed, go to **Settings** → **Networking** → click **Generate Domain**
-6. Copy your backend URL — it will look like:
-   `https://taskflow-backend-production.up.railway.app`
-
----
-
-## STEP 6 — Update the frontend API URL
-
-Open `frontend/public/js/app.js` and find line ~60:
-
-```js
-const API_BASE = 'REPLACE_WITH_RAILWAY_BACKEND_URL/api';
-```
-
-Replace it with your actual Railway backend URL:
-
-```js
-const API_BASE = 'https://taskflow-backend-production.up.railway.app/api';
-```
-
-Save the file.
+6. Click **Save Changes** → Render auto-redeploys
+7. Once deployed, go to the service URL (shown at the top of the dashboard)
+8. Test: visit `https://your-service.onrender.com/api/health`
+   → should return: `{"success":true,"message":"OK","data":{"status":"ok","time":"..."}}`
+9. Copy your Render URL — you'll need it in the next step
 
 ---
 
-## STEP 7 — Deploy the frontend to Vercel
+## STEP 7 — Update the Frontend API URL
+
+Open `frontend/public/js/app.js` and find line ~62:
+
+```js
+const API_BASE = 'REPLACE_WITH_RENDER_BACKEND_URL/api';
+```
+
+Replace with your actual Render URL:
+
+```js
+const API_BASE = 'https://taskflow-backend.onrender.com/api';
+```
+
+Save, commit and push:
+
+```bash
+git add frontend/public/js/app.js
+git commit -m "Set Render backend URL"
+git push
+```
+
+---
+
+## STEP 8 — Deploy the Frontend to Vercel
 
 1. Go to https://vercel.com → **Add New Project**
-2. Import your GitHub repository
-3. Configure the project:
+2. Import your GitHub repo **sai-nithin24/Task**
+3. Configure:
    - **Root Directory**: `frontend`
    - **Framework Preset**: Other
    - **Build Command**: *(leave empty)*
-   - **Output Directory**: *(leave empty — Vercel uses vercel.json)*
+   - **Output Directory**: *(leave empty)*
 4. Click **Deploy**
-5. Once deployed, copy your Vercel URL, e.g.:
-   `https://taskflow.vercel.app`
+5. Once deployed, copy your Vercel URL (e.g. `https://task-abc123.vercel.app`)
 
 ---
 
-## STEP 8 — Set CORS origin on Railway
+## STEP 9 — Fix CORS on Render
 
-1. Go back to Railway → your backend service → **Variables**
-2. Update `APP_URL` to your Vercel URL:
+1. Go to Render → your backend service → **Environment**
+2. Update `APP_URL` to your Vercel URL (no trailing slash):
    ```
-   APP_URL = https://taskflow.vercel.app
+   APP_URL = https://task-abc123.vercel.app
    ```
-3. Railway auto-redeploys on variable changes
+3. Click **Save Changes** → Render redeploys automatically
 
 ---
 
-## STEP 9 — Verify everything works
+## STEP 10 — Test the Full App
 
-1. Open your Vercel URL — TaskFlow login page should load
-2. Register a new account
-3. Create a project, add some tasks
-4. Test the health endpoint directly:
-   `https://taskflow-backend-production.up.railway.app/api/health`
-   
-   Should return: `{"success":true,"message":"OK","data":{"status":"ok","time":"..."}}`
+1. Open your Vercel URL
+2. Click **Create Account** → register
+3. Create a project → add tasks → drag tasks between columns
+4. Check the Activity log
 
 ---
 
-## Local Development (unchanged)
+## Local Development
 
+Create a `.env` file in the project root (already in `.gitignore`):
+
+```env
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your-project-id.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----\n"
+JWT_SECRET=any_local_dev_secret_at_least_32_chars
+JWT_EXPIRY=3600
+APP_ENV=development
+APP_DEBUG=true
+APP_URL=http://localhost:8080
+```
+
+Then run:
 ```bash
-# Ensure your local .env has correct DB credentials, then:
 php -S localhost:8080 backend/server.php
-```
-
-The frontend at `http://localhost:8080` will use the local API automatically.
-
----
-
-## File Structure Added for Deployment
-
-```
-backend/
-  Dockerfile              ← PHP 8.2 + Apache + mod_rewrite
-  docker-entrypoint.sh    ← Patches Apache to use Railway's $PORT
-  railway.toml            ← Railway build/deploy config
-frontend/
-  vercel.json             ← Vercel routing config
-  public/
-    css/styles.css        ← Production copy (served by Vercel)
-    js/app.js             ← Production copy with Railway API URL
 ```
 
 ---
 
 ## Troubleshooting
 
+**`Firebase credentials are not configured` error:**
+- Check all 3 Firebase env vars are set on Render
+- Make sure `FIREBASE_PRIVATE_KEY` is pasted in full — including the header/footer lines
+
+**`Failed to load Firebase private key` error:**
+- The private key must have real newlines. Render stores multi-line secrets correctly when pasted raw. If issues persist, try replacing literal `\n` in the key with actual line breaks when pasting.
+
 **CORS errors in browser:**
-- Check `APP_URL` on Railway exactly matches your Vercel URL (no trailing slash)
-- Redeploy backend after changing `APP_URL`
+- Verify `APP_URL` on Render exactly matches your Vercel domain
+- No trailing slash in `APP_URL`
 
-**502 / connection refused on backend:**
-- Check Railway logs (click service → **Deployments** → **View Logs**)
-- Verify all DB_ variables are set correctly
-- Make sure the MySQL service is running
+**Firestore `FAILED_PRECONDITION` / index error:**
+- Create the missing composite index shown in the error URL (Firestore includes a direct link to create it)
 
-**Frontend loads but API calls fail:**
-- Open browser DevTools → Network tab → check the API request URL
-- Make sure `API_BASE` in `frontend/public/js/app.js` matches your Railway domain exactly
-
-**Database tables not found:**
-- Re-run `docs/database-schema.sql` via Railway's Query tab
-
-**Railway build fails:**
-- Check that **Root Directory** is set to `backend` in Railway service settings
-- Railway should pick up `backend/Dockerfile` automatically
+**Render free tier note:**
+- Services sleep after 15 min of inactivity — first request after sleep takes ~30 seconds to wake up. Expected behavior on the free plan.

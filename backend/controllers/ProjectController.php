@@ -16,7 +16,7 @@ class ProjectController extends BaseController
     public function index(): void
     {
         $this->requireAuth();
-        $userId   = (int)$this->authUser['user_id'];
+        $userId   = (string)$this->authUser['user_id'];
         $projects = $this->projects->allForUser($userId);
         Response::success(['projects' => $projects]);
     }
@@ -25,7 +25,7 @@ class ProjectController extends BaseController
     public function store(): void
     {
         $this->requireAuth();
-        $userId = (int)$this->authUser['user_id'];
+        $userId = (string)$this->authUser['user_id'];
         $data   = $this->body();
         $errors = $this->validate($data, ['name']);
 
@@ -45,8 +45,8 @@ class ProjectController extends BaseController
     public function show(array $params): void
     {
         $this->requireAuth();
-        $userId  = (int)$this->authUser['user_id'];
-        $project = $this->projects->findById((int)$params['id'], $userId);
+        $userId  = (string)$this->authUser['user_id'];
+        $project = $this->projects->findById((string)$params['id'], $userId);
 
         if (!$project) {
             Response::notFound('Project not found.');
@@ -59,7 +59,7 @@ class ProjectController extends BaseController
     public function update(array $params): void
     {
         $this->requireAuth();
-        $userId = (int)$this->authUser['user_id'];
+        $userId = (string)$this->authUser['user_id'];
         $data   = $this->body();
         $errors = $this->validate($data, ['name']);
 
@@ -67,14 +67,14 @@ class ProjectController extends BaseController
             Response::error('Project name is required.', 422);
         }
 
-        if (!$this->projects->findById((int)$params['id'], $userId)) {
+        if (!$this->projects->findById((string)$params['id'], $userId)) {
             Response::notFound('Project not found.');
         }
 
-        $this->projects->update((int)$params['id'], $data, $userId);
-        $this->activity->log($userId, 'project_updated', null, (int)$params['id']);
+        $this->projects->update((string)$params['id'], $data, $userId);
+        $this->activity->log($userId, 'project_updated', null, (string)$params['id']);
 
-        $project = $this->projects->findById((int)$params['id'], $userId);
+        $project = $this->projects->findById((string)$params['id'], $userId);
         Response::success(['project' => $project], 'Project updated.');
     }
 
@@ -82,14 +82,14 @@ class ProjectController extends BaseController
     public function destroy(array $params): void
     {
         $this->requireAuth();
-        $userId = (int)$this->authUser['user_id'];
+        $userId = (string)$this->authUser['user_id'];
 
-        if (!$this->projects->findById((int)$params['id'], $userId)) {
+        if (!$this->projects->findById((string)$params['id'], $userId)) {
             Response::notFound('Project not found.');
         }
 
-        $this->projects->delete((int)$params['id'], $userId);
-        $this->activity->log($userId, 'project_deleted', null, (int)$params['id']);
+        $this->projects->delete((string)$params['id'], $userId);
+        $this->activity->log($userId, 'project_deleted', null, (string)$params['id']);
 
         Response::success(null, 'Project deleted.');
     }

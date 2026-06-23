@@ -1,60 +1,83 @@
 <?php
 declare(strict_types=1);
 
+/**
+ * ActivityModel — Firestore-backed activity log.
+ *
+ * Collection: activity_logs/{id}
+ * Fields: user_id, user_name, avatar_color, task_id, task_title,
+ *         project_id, action, meta, created_at
+ *
+ * All join-time fields (user_name, avatar_color, task_title) are
+ * denormalized at write time so reads need no joins.
+ */
 class ActivityModel
 {
-    private PDO $db;
+    private FirestoreClient $db;
+    private const COLLECTION = 'activity_logs';
 
     public function __construct()
     {
-        $this->db = Database::getConnection();
+        $this->db = FirestoreClient::getInstance();
     }
 
     /**
+     * Log an activity event.
+     * Fetches user and task names for denormalization so reads are fast.
+     *
      * @param array<string,mixed>|null $meta
      */
-    public function log(int $userId, string $action, ?int $taskId = null, ?int $projectId = null, ?array $meta = null): void
-    {
-        $stmt = $this->db->prepare(
-            'INSERT INTO activity_logs (user_id, task_id, project_id, action, meta) VALUES (?, ?, ?, ?, ?)'
-        );
-        $stmt->execute([
-            $userId,
-            $taskId,
-            $projectId,
-            $action,
-            $meta !== null ? json_encode($meta) : null,
-        ]);
+    public function log(
+        string  $userId,
+        string  $action,
+        ?string $taskId    = null,
+        ?string $projectId = null,
+        ?array  $meta      = null
+    ): void {
+        // Denormalize user info
+        $userName    = null;
+        $avatarColor = null;
+        $userDoc     = $this->db->getDocument('users', $userId);
+        if ($userDoc) {
+            $userName    = $userDoc['name']         ?? null;
+            $avatarColor = $userDoc['avatar_color'] ?? null;
+        }
+
+        // Denormalize task title
+        $taskTitle = null;
+        if ($taskId) {
+            $taskDoc   = $this->db->getDocument('tasks', $taskId);
+            $taskTitle = $taskDoc['title'] ?? null;
+        }
+
+        $docData = [
+            'user_id'      => $userId,
+            'user_name'    => $userName,
+            'avatar_color' => $avatarColor,
+            'task_id'      => $taskId,
+            'task_title'   => $taskTitle,
+            'project_id'   => $projectId,
+            'action'       => $action,
+            'meta'         => $meta ? json_encode($meta) : null,
+            'created_at'   => date('c'),
+        ];
+
+        $this->db->addDocument(self::COLLECTION, $docData);
     }
 
     /** @return array<int, array> */
-    public function recentForProject(int $projectId, int $limit = 30): array
+    public function recentForProject(string $projectId, int $limit = 30): array
     {
-        $stmt = $this->db->prepare(
-            'SELECT a.*, u.name AS user_name, u.avatar_color, t.title AS task_title
-             FROM activity_logs a
-             LEFT JOIN users u ON u.id = a.user_id
-             LEFT JOIN tasks t ON t.id = a.task_id
-             WHERE a.project_id = ?
-             ORDER BY a.created_at DESC
-             LIMIT ?'
-        );
-        $stmt->execute([$projectId, $limit]);
-        return $stmt->fetchAll();
+        return $this->db->query(self::COLLECTION, [
+            ['project_id', '==', $projectId],
+        ], [['created_at', 'DESCENDING']], $limit);
     }
 
     /** @return array<int, array> */
-    public function recentForUser(int $userId, int $limit = 20): array
+    public function recentForUser(string $userId, int $limit = 20): array
     {
-        $stmt = $this->db->prepare(
-            'SELECT a.*, t.title AS task_title
-             FROM activity_logs a
-             LEFT JOIN tasks t ON t.id = a.task_id
-             WHERE a.user_id = ?
-             ORDER BY a.created_at DESC
-             LIMIT ?'
-        );
-        $stmt->execute([$userId, $limit]);
-        return $stmt->fetchAll();
+        return $this->db->query(self::COLLECTION, [
+            ['user_id', '==', $userId],
+        ], [['created_at', 'DESCENDING']], $limit);
     }
 }

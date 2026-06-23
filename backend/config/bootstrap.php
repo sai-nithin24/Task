@@ -6,10 +6,12 @@ require_once __DIR__ . '/env.php';
 loadEnv(dirname(__DIR__, 2) . '/.env');
 
 // Ensure all env vars are accessible via $_ENV regardless of PHP's
-// variables_order setting (important for Render and other PaaS hosts
-// that inject env vars as system environment variables, not into $_ENV).
-foreach (['DB_HOST','DB_PORT','DB_NAME','DB_USER','DB_PASS','DB_CHARSET',
-          'JWT_SECRET','JWT_EXPIRY','APP_ENV','APP_DEBUG','APP_URL'] as $_envKey) {
+// variables_order setting (important for Render which injects env vars
+// as system environment variables, not into $_ENV directly).
+foreach ([
+    'FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY',
+    'JWT_SECRET', 'JWT_EXPIRY', 'APP_ENV', 'APP_DEBUG', 'APP_URL',
+] as $_envKey) {
     if (!isset($_ENV[$_envKey])) {
         $v = getenv($_envKey);
         if ($v !== false) {
@@ -46,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 // ── Autoloader ───────────────────────────────────────────────
 spl_autoload_register(function (string $class): void {
     $map = [
-        'Database'          => __DIR__ . '/database.php',
+        'FirestoreClient'   => __DIR__ . '/database.php',
         'Router'            => __DIR__ . '/../core/Router.php',
         'Response'          => __DIR__ . '/../core/Response.php',
         'JwtHelper'         => __DIR__ . '/../core/JwtHelper.php',

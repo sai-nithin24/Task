@@ -14,7 +14,7 @@ class ActivityController extends BaseController
     public function forProject(array $params): void
     {
         $this->requireAuth();
-        $logs = $this->activity->recentForProject((int)$params['project_id']);
+        $logs = $this->activity->recentForProject((string)$params['project_id']);
         Response::success(['logs' => $logs]);
     }
 
@@ -22,7 +22,7 @@ class ActivityController extends BaseController
     public function forMe(): void
     {
         $this->requireAuth();
-        $userId = (int)$this->authUser['user_id'];
+        $userId = (string)$this->authUser['user_id'];
         $logs   = $this->activity->recentForUser($userId);
         Response::success(['logs' => $logs]);
     }
