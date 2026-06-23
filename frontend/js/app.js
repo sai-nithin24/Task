@@ -460,7 +460,7 @@ function selectProject(project) {
   $('stats-bar').classList.remove('stats-bar--hidden');
 
   document.querySelectorAll('.project-item').forEach(li => {
-    li.classList.toggle('active', parseInt(li.dataset.id) === project.id);
+    li.classList.toggle('active', li.dataset.id === String(project.id));
   });
 
   showView('board');
@@ -611,13 +611,13 @@ function renderBoard(tasks) {
       card.addEventListener('dragend',   onDragEnd);
       card.querySelector('.edit-btn')?.addEventListener('click', ev => {
         ev.stopPropagation();
-        const task = state.tasks.find(t => t.id === parseInt(card.dataset.id));
+        const task = state.tasks.find(t => String(t.id) === String(card.dataset.id));
         if (task) openTaskModal(task);
       });
       card.querySelector('.delete-btn')?.addEventListener('click', ev => {
         ev.stopPropagation();
         const title = card.querySelector('.task-title')?.textContent || 'this task';
-        openConfirmDelete(parseInt(card.dataset.id), title.trim());
+        openConfirmDelete(String(card.dataset.id), title.trim());
       });
     });
   });
@@ -669,7 +669,7 @@ function renderStats(s) {
    DRAG & DROP
 ══════════════════════════════════════════════════ */
 function onDragStart(e) {
-  state.dragTaskId = parseInt(e.currentTarget.dataset.id);
+  state.dragTaskId = String(e.currentTarget.dataset.id);
   e.currentTarget.classList.add('dragging');
   e.dataTransfer.effectAllowed = 'move';
 }
@@ -689,7 +689,7 @@ async function onDrop(e) {
   e.currentTarget.classList.remove('drag-over');
   const newStatus = e.currentTarget.closest('.board-column')?.dataset.status;
   if (!newStatus || !state.dragTaskId) return;
-  const task = state.tasks.find(t => t.id === state.dragTaskId);
+  const task = state.tasks.find(t => String(t.id) === String(state.dragTaskId));
   if (!task || task.status === newStatus) return;
   const oldStatus  = task.status;
   task.status      = newStatus;
